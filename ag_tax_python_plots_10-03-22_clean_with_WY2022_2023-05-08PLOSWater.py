@@ -1,3 +1,4 @@
+import os
 import seaborn as sn
 import numpy as np
 import pandas as pd
@@ -13,12 +14,14 @@ matplotlib.rcParams['axes.linewidth'] = 0.4
 
 # https://seaborn.pydata.org/generated/seaborn.kdeplot.html
 
-pr_wy = np.loadtxt("CVavgYly_pr_wy_by_DAU.csv", delimiter=",") # mm
-etc_wy = np.loadtxt("CVavgYly_etc_wy_by_DAU.csv", delimiter=",") # mm
-tmean_wy = np.loadtxt("CVavgYly_tmean_wy_by_DAU.csv", delimiter=",") # mean air temperature in Celsius
-rmin_wy = np.loadtxt("CVavgYly_rmin_wy_by_DAU.csv", delimiter=",") # mean minimum relative humidity in % 
-rmax_wy = np.loadtxt("CVavgYly_rmax_wy_by_DAU.csv", delimiter=",") # mean maximum relative humidity in % 
-vpd_wy = np.loadtxt("CVavgYly_vpd_wy_by_DAU.csv", delimiter=",") # mean vapor pressure deficit in kPa 
+data_folder = "data_update_2023"
+
+pr_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_pr_wy_by_DAU.csv"), delimiter=",")  # mm
+etc_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_etc_wy_by_DAU.csv"), delimiter=",")  # mm
+tmean_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_tmean_wy_by_DAU.csv"), delimiter=",")  # mean air temperature in Celsius
+rmin_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_rmin_wy_by_DAU.csv"), delimiter=",")  # mean minimum relative humidity in %
+rmax_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_rmax_wy_by_DAU.csv"), delimiter=",")  # mean maximum relative humidity in %
+vpd_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_vpd_wy_by_DAU.csv"), delimiter=",")  # mean vapor pressure deficit in kPa
 
 # = pd.DataFrame({'pr':[156],'etc':[1134]}) # eto is the average of the 
 #etc_wy_with_2022 = etc_wy
@@ -28,8 +31,11 @@ START_WATER_YEAR = 1980
 END_WATER_YEAR = 2023
 units = 'SI'
 
-lower_index = 0
-upper_index = END_WATER_YEAR - START_WATER_YEAR
+MIN_BASELINE_YEAR = 1980
+MAX_BASELINE_YEAR = 2011
+MIN_RECENT_YEAR = 2012
+MAX_RECENT_YEAR = 2023
+
 
 def year_index(year, start_year=START_WATER_YEAR, inclusive=False):
     """
@@ -40,32 +46,50 @@ def year_index(year, start_year=START_WATER_YEAR, inclusive=False):
     :return: index value in a sequential list/np array of annual data
     """
 
-    index = year - start_year
+    index = int(year) - int(start_year)
     if inclusive:
         index += 1
 
     return index
 
 
-if units=='SI':
+lower_index = 0
+upper_index = year_index(END_WATER_YEAR, inclusive=True)
+
+
+def data_year_slice(data, year, as_series=True):
+    index = year_index(year)
+    slice = data[index:index+1]
+    if as_series:
+        return pd.Series(slice)
+    else:
+        return slice
+
+
+min_baseline_year_index = year_index(MIN_BASELINE_YEAR)
+max_baseline_year_index = year_index(MAX_BASELINE_YEAR, inclusive=True)
+min_recent_year_index = year_index(MIN_RECENT_YEAR)
+max_recent_year_index = year_index(MAX_RECENT_YEAR, inclusive=True)
+
+if units == 'SI':
     etc_wy = etc_wy
     pr_wy = pr_wy
-    tmean_wy = tmean_wy-273.15 # convert from Kelvin to Celsius
-elif units=='english':
-    etc_wy = etc_wy/25.4
-    pr_wy = pr_wy/25.4
-    tmean_wy = (tmean_wy-273.15)*(9/5)+32 # convert from Kelvin to Fahrenheit 
+    tmean_wy = tmean_wy - 273.15  # convert from Kelvin to Celsius
+elif units == 'english':
+    etc_wy = etc_wy / 25.4
+    pr_wy = pr_wy / 25.4
+    tmean_wy = (tmean_wy - 273.15) * (9 / 5) + 32  # convert from Kelvin to Fahrenheit
 
 
-etc_wy = etc_wy[lower_index:upper_index]
-pr_wy = pr_wy[lower_index:upper_index]
-tmean_wy = tmean_wy[lower_index:upper_index]
-vpd_wy = vpd_wy[lower_index:upper_index]
-rmin_wy = rmin_wy[lower_index:upper_index]
-rmax_wy = rmax_wy[lower_index:upper_index]
+etc_wy = etc_wy[lower_index:upper_index+1]
+pr_wy = pr_wy[lower_index:upper_index+1]
+tmean_wy = tmean_wy[lower_index:upper_index+1]
+vpd_wy = vpd_wy[lower_index:upper_index+1]
+rmin_wy = rmin_wy[lower_index:upper_index+1]
+rmax_wy = rmax_wy[lower_index:upper_index+1]
 
 # make an array of water years
-wy = np.arange(START_WATER_YEAR, END_WATER_YEAR) # water years
+wy = np.arange(START_WATER_YEAR, END_WATER_YEAR+1)  # water years
 
 # definition to label points on the scatterplot 
 def label_point(x, y, val, ax, xoffset, yoffset):
@@ -77,6 +101,7 @@ def label_point(x, y, val, ax, xoffset, yoffset):
     c = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
     c = pd.concat([c, b], axis=0, ignore_index = True)
     c.plot(x="x", y="y", kind="line", ax=ax, color='black', alpha=1, linestyle = 'dashed', zorder=1, label='_nolegend_',linewidth=0.05)
+
 def label_point_english(x, y, val, ax, xoffset, yoffset):
     a = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
     b = pd.concat({'x': x+xoffset, 'y': y+yoffset, 'val': val}, axis=1)
@@ -86,22 +111,18 @@ def label_point_english(x, y, val, ax, xoffset, yoffset):
     c = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
     c = pd.concat([c, b], axis=0, ignore_index = True)
     c.plot(x="x", y="y", kind="line", ax=ax, color='k', alpha=0.4, linestyle = 'dashed', zorder=1, label='_nolegend_')
+
 def label_point_contour(x, y, val, ax):
     a = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
-    #b = pd.concat({'x': x+16, 'y': y+16, 'val': val}, axis=1)
     for i, point in a.iterrows():
         t = ax.text(point['x'], point['y'], str(round(point.val))+'%')  
         t.set_bbox(dict(facecolor='white', alpha=1, edgecolor='white', boxstyle='round', pad=0.1))
-    #a = pd.concat(b, axis=0, ignore_index = True)
-    #a.plot(x="x", y="y", kind="line", ax=ax, color='k', alpha=0.6, linestyle = 'dashed')
+
 def label_point_no_leaders(x, y, val, ax, xoffset, yoffset):
     a = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
-    b = pd.concat({'x': x+xoffset, 'y': y+yoffset, 'val': val}, axis=1)
     for i, point in a.iterrows():
         t = ax.text(point['x']+xoffset, point['y']+yoffset, str(round(point.val)))    
         t.set_bbox(dict(facecolor='white', alpha=1, edgecolor='white'))
-    c = pd.concat({'x': x+2, 'y': y+2, 'val': val}, axis=1)
-    c = pd.concat([c, b], axis=0, ignore_index = True)
 
 plt.rc('font', size=6)
 plt.rc('axes', labelsize=6) 
@@ -118,15 +139,15 @@ fig1.subplots_adjust(top=0.95, left=0.18)
 ax1 = fig1.add_subplot(111)
 #p1 = sn.kdeplot(x=pr_wy[0:43], y=etc_wy[0:43], levels=[0.25,0.5,1], ax=ax1, shade_lowest=False, zorder=1, label='_nolegend_', color='grey', linewidth=0.8, kwargs={"linewidths":0.2})
 p2 = sn.scatterplot(x=pr_wy[lower_index:upper_index], y=etc_wy[lower_index:upper_index], ax=ax1, marker="o", edgecolor='black', hue=tmean_wy[lower_index:upper_index], legend=False, label='_nolegend_', palette='coolwarm', s=15, facecolor='grey', alpha=1, zorder=10)
-p7 = sn.regplot(x=pr_wy[0:31], y=etc_wy[0:31], ax=ax1, fit_reg=True, color='b',marker='None')
-p27 = sn.lineplot(x=[800,801], y=[1000,1001], color='b', label='Regression 1980-2011', lw=0.8) # legend
-p18 = sn.regplot(x=pr_wy[32:43], y=etc_wy[32:43], ax=ax1, fit_reg=True, color='r',marker='None')
-p28 = sn.lineplot(x=[800,801], y=[1000,1001], color='r', label='Regression 2012-2022', lw=0.8) # legend
+p7 = sn.regplot(x=pr_wy[min_baseline_year_index:max_baseline_year_index], y=etc_wy[min_baseline_year_index:max_baseline_year_index], ax=ax1, fit_reg=True, color='b',marker='None')
+p27 = sn.lineplot(x=[800,801], y=[1000,1001], color='b', label=f'Regression {MIN_BASELINE_YEAR} - {MAX_BASELINE_YEAR}', lw=0.8)  # legend
+p18 = sn.regplot(x=pr_wy[min_recent_year_index:max_recent_year_index], y=etc_wy[min_recent_year_index:max_recent_year_index], ax=ax1, fit_reg=True, color='r',marker='None')
+p28 = sn.lineplot(x=[800,801], y=[1000,1001], color='r', label=f'Regression {MIN_RECENT_YEAR} - {MAX_RECENT_YEAR}', lw=0.8)  # legend
 ax1.xaxis.set_tick_params(width=0.2)
 ax1.yaxis.set_tick_params(width=0.2)
 
-results_baseline = linregress(pr_wy[0:31], etc_wy[0:31]) # slope, intercept, r, p, se
-results_recent = linregress(pr_wy[32:43], etc_wy[32:43]) # slope, intercept, r, p, se
+results_baseline = linregress(pr_wy[min_baseline_year_index:max_baseline_year_index], etc_wy[min_baseline_year_index:max_baseline_year_index]) # slope, intercept, r, p, se
+results_recent = linregress(pr_wy[min_recent_year_index:max_recent_year_index], etc_wy[min_recent_year_index:max_recent_year_index]) # slope, intercept, r, p, se
 
 rsquared_baseline = results_baseline[2]*results_baseline[2]
 rsquared_recent = results_recent[2]*results_recent[2]
@@ -159,23 +180,28 @@ for pos in ['top','right']:
 
 #label_point_contour(pd.Series(140), pd.Series(1078), pd.Series(75), ax1) # contour 3
 
-if units=='SI':
-    # FIX - is there a way to iterate this? Likely by putting the offsets in some kind of array so that it's clearer what we're doing?
-    label_point(pd.Series(pr_wy[42:43]), pd.Series(etc_wy[42:43]), pd.Series(wy[42:43]), ax1, -28, 35) # 2022
-    label_point(pd.Series(pr_wy[41:42]), pd.Series(etc_wy[41:42]), pd.Series(wy[41:42]), ax1, -28, 28) # 2021
-    label_point(pd.Series(pr_wy[40:41]), pd.Series(etc_wy[40:41]), pd.Series(wy[40:41]), ax1, 48, 48) # 2020 
-    label_point(pd.Series(pr_wy[39:40]), pd.Series(etc_wy[39:40]), pd.Series(wy[39:40]), ax1, 48, 38) # 2019
-    #label_point(pd.Series(pr_wy[38:39]), pd.Series(etc_wy[38:39]), pd.Series(wy[38:39]), ax1, 18, 50) # 2018
-    label_point(pd.Series(pr_wy[37:38]), pd.Series(etc_wy[37:38]), pd.Series(wy[37:38]), ax1, 90, 8) # 2017
-    label_point(pd.Series(pr_wy[36:37]), pd.Series(etc_wy[36:37]), pd.Series(wy[36:37]), ax1, 28, 28) # 2016
-    label_point(pd.Series(pr_wy[35:36]), pd.Series(etc_wy[35:36]), pd.Series(wy[35:36]), ax1, 98, 48) # 2015
-    label_point(pd.Series(pr_wy[34:35]), pd.Series(etc_wy[34:35]), pd.Series(wy[34:35]), ax1, -60, 35) # 2014
-    label_point(pd.Series(pr_wy[33:34]), pd.Series(etc_wy[33:34]), pd.Series(wy[33:34]), ax1, -94, -70) # 2013
-    #label_point(pd.Series(pr_wy[32:33]), pd.Series(etc_wy[32:33]), pd.Series(wy[32:33]), ax1, 68, 38) # 2012
-    label_point(pd.Series(pr_wy[31:32]), pd.Series(etc_wy[31:32]), pd.Series(wy[31:32]), ax1, -28, -28) # 2011 
-    label_point(pd.Series(pr_wy[19:20]), pd.Series(etc_wy[19:20]), pd.Series(wy[19:20]), ax1, -48, -48) # 1999
-    label_point(pd.Series(pr_wy[18:19]), pd.Series(etc_wy[18:19]), pd.Series(wy[18:19]), ax1, -90, -10) # 1998 
-    label_point(pd.Series(pr_wy[3:4]), pd.Series(etc_wy[3:4]), pd.Series(wy[3:4]), ax1, 25, 25) # 1983 
+year_base_positions = {  # these are hardcoded based on Kelley's work - seems like they're tuned already and not an automatic lookup
+    '2023': {'xoffset': 28, 'yoffset': 15},
+    '2022': {'xoffset': -28, 'yoffset': 35},
+    '2021': {'xoffset': -28, 'yoffset': 27},
+    '2020': {'xoffset': 48, 'yoffset': 48},
+    '2019': {'xoffset': 48, 'yoffset': 38},
+    # '2018': {'xoffset': 18, 'yoffset': 50},
+    '2017': {'xoffset': 90, 'yoffset': 8},
+    '2016': {'xoffset': 28, 'yoffset': 28},
+    '2015': {'xoffset': 98, 'yoffset': 48},
+    '2014': {'xoffset': -60, 'yoffset': 35},
+    '2013': {'xoffset': -94, 'yoffset': -70},
+    # '2012': {'xoffset': 68, 'yoffset': 38},
+    '2011': {'xoffset': -28, 'yoffset': -28},
+    '1999': {'xoffset': -48, 'yoffset': -48},
+    '1998': {'xoffset': -90, 'yoffset': -10},
+    '1983': {'xoffset': 25, 'yoffset': 25},
+}
+
+if units == 'SI':
+    for year in year_base_positions:
+        label_point(data_year_slice(pr_wy, year), data_year_slice(etc_wy, year), data_year_slice(wy, year), ax1, **year_base_positions[year])
 #    label_point_contour(pd.Series(226), pd.Series(970), pd.Series(25), ax1) # contour 1
 #    label_point_contour(pd.Series(232), pd.Series(989), pd.Series(50), ax1) # contour 2
     plt.xlim([40,600])
@@ -195,7 +221,8 @@ if units=='SI':
     fig1.savefig('__fig1_ETc_vs_Precip_mm.eps', dpi=500)
     fig1.savefig('__fig1_ETc_vs_Precip_mm.pdf', dpi=500)
     fig1.savefig('__fig1_ETc_vs_Precip_mm.tiff', dpi=500)
-elif units=='english':
+
+elif units == 'english':
 
     # FIX - is there a way to iterate this?
     label_point_english(pd.Series(pr_wy[42:43]), pd.Series(etc_wy[42:43]), pd.Series(wy[42:43]), ax1, -28/25.4, 35/25.4) # 2022
