@@ -27,6 +27,7 @@ vpd_wy = np.loadtxt(os.path.join(data_folder, "CVavgYly_vpd_wy_by_DAU.csv"), del
 #etc_wy_with_2022 = etc_wy
 #pr_wy_with_2022 = pr_wy
 
+DEBUG = False   # adds extra bits to plotting to make sure that regression values are correct
 START_WATER_YEAR = 1980
 END_WATER_YEAR = 2023
 units = 'SI'
@@ -36,6 +37,10 @@ MAX_BASELINE_YEAR = 2011
 MIN_RECENT_YEAR = 2012
 MAX_RECENT_YEAR = 2023
 
+# seaborn.regplot params. Moved up here to where other constants are while we fiddle
+CI = 95
+ROBUST = False
+BOOTSTRAP_SAMPLES = 1000
 
 def year_index(year, start_year=START_WATER_YEAR, inclusive=False):
     """
@@ -56,8 +61,17 @@ def year_index(year, start_year=START_WATER_YEAR, inclusive=False):
 lower_index = 0
 upper_index = year_index(END_WATER_YEAR, inclusive=True)
 
+print(f"Debug: Lower Index: {lower_index}, Upper Index: {upper_index}. Index range: {upper_index - lower_index}")
 
 def data_year_slice(data, year, as_series=True):
+    """
+        Pulls out a slice of data from a numpy array corresponding to a single year. This could all be handled more
+        efficiently, but working with the code as-written, this way improves it a bunch already.
+    :param data: a 1-dimensional numpy array with annual values aligning to the time range of the rest of the code.
+    :param year: the year to pull out - it will calculate the expected index of that year based on START_WATER_YEAR
+    :param as_series: whether to coerce it to a pandas Series - by default it does because that's how it's used in other parts of the code.
+    :return:
+    """
     index = year_index(year)
     slice = data[index:index+1]
     if as_series:
@@ -70,6 +84,8 @@ min_baseline_year_index = year_index(MIN_BASELINE_YEAR)
 max_baseline_year_index = year_index(MAX_BASELINE_YEAR, inclusive=True)
 min_recent_year_index = year_index(MIN_RECENT_YEAR)
 max_recent_year_index = year_index(MAX_RECENT_YEAR, inclusive=True)
+print(f"length of baseline years = {max_baseline_year_index - min_baseline_year_index}")
+print(f"length of recent years = {max_recent_year_index - min_recent_year_index}")
 
 if units == 'SI':
     etc_wy = etc_wy
@@ -139,18 +155,61 @@ fig1.subplots_adjust(top=0.95, left=0.18)
 ax1 = fig1.add_subplot(111)
 #p1 = sn.kdeplot(x=pr_wy[0:43], y=etc_wy[0:43], levels=[0.25,0.5,1], ax=ax1, shade_lowest=False, zorder=1, label='_nolegend_', color='grey', linewidth=0.8, kwargs={"linewidths":0.2})
 p2 = sn.scatterplot(x=pr_wy[lower_index:upper_index], y=etc_wy[lower_index:upper_index], ax=ax1, marker="o", edgecolor='black', hue=tmean_wy[lower_index:upper_index], legend=False, label='_nolegend_', palette='coolwarm', s=15, facecolor='grey', alpha=1, zorder=10)
-p7 = sn.regplot(x=pr_wy[min_baseline_year_index:max_baseline_year_index], y=etc_wy[min_baseline_year_index:max_baseline_year_index], ax=ax1, fit_reg=True, color='b',marker='None')
-p27 = sn.lineplot(x=[800,801], y=[1000,1001], color='b', label=f'Regression {MIN_BASELINE_YEAR} - {MAX_BASELINE_YEAR}', lw=0.8)  # legend
-p18 = sn.regplot(x=pr_wy[min_recent_year_index:max_recent_year_index], y=etc_wy[min_recent_year_index:max_recent_year_index], ax=ax1, fit_reg=True, color='r',marker='None')
-p28 = sn.lineplot(x=[800,801], y=[1000,1001], color='r', label=f'Regression {MIN_RECENT_YEAR} - {MAX_RECENT_YEAR}', lw=0.8)  # legend
-ax1.xaxis.set_tick_params(width=0.2)
-ax1.yaxis.set_tick_params(width=0.2)
+p7 = sn.regplot(x=pr_wy[min_baseline_year_index:max_baseline_year_index],
+                y=etc_wy[min_baseline_year_index:max_baseline_year_index],
+                ax=ax1,
+                fit_reg=True,
+                robust=ROBUST,
+                n_boot=BOOTSTRAP_SAMPLES,
+                ci=CI,
+                color='b',
+                marker='None')
+
+
 
 results_baseline = linregress(pr_wy[min_baseline_year_index:max_baseline_year_index], etc_wy[min_baseline_year_index:max_baseline_year_index]) # slope, intercept, r, p, se
 results_recent = linregress(pr_wy[min_recent_year_index:max_recent_year_index], etc_wy[min_recent_year_index:max_recent_year_index]) # slope, intercept, r, p, se
+print("Baseline Results")
+print(results_baseline)
+
+print("Recent Years Results")
+print(results_recent)
 
 rsquared_baseline = results_baseline[2]*results_baseline[2]
+print(f"Baseline R-Squared: {rsquared_baseline}")
 rsquared_recent = results_recent[2]*results_recent[2]
+print(f"Recent Years R-Squared: {rsquared_recent}")
+
+if DEBUG:  # we don't always want this as it modifies figures, but we can use it for debug
+    # we're going to manually plot the regression that we just ran to make sure if fits with seaborn's regression plot,
+    # which we're leaving in place because it includes a confidence interval.
+    x = [0, 600]  # set x values for lines
+
+    # get the y values - at 0 it's just the intercept, at 600 it's y = mx + b or regression slope * 600 + intercept
+    y_baseline = [results_baseline.intercept, results_baseline.slope * 600 + results_baseline.intercept]
+    y_recent = [results_recent.intercept, results_recent.slope * 600 + results_recent.intercept]
+    sn.lineplot(x=x, y=y_baseline)   # just add the lines now - don't make them pretty for debug.
+    sn.lineplot(x=x, y=y_recent)
+
+# Note that the regression plots below don't rely on the above regressions - seaborn runs its own, but the debug code above
+# confirms identical outputs - seaborn doesn't really make a guarantee of that.
+
+# Put a legend in by manually drawing lines up high
+p27 = sn.lineplot(x=[800,801], y=[1000,1001], color='b', label=f'Regression {MIN_BASELINE_YEAR} - {MAX_BASELINE_YEAR}', lw=0.8)  # (y={results_baseline.slope:.2f}x+{results_baseline.intercept:4.0f})', lw=0.8)  # legend
+p28 = sn.lineplot(x=[800,801], y=[1000,1001], color='r', label=f'Regression {MIN_RECENT_YEAR} - {MAX_RECENT_YEAR}', lw=0.8)  # (y={results_recent.slope:.2f}x+{results_recent.intercept:4.0f})', lw=0.8)  # legend
+
+# add the recent years regression
+p18 = sn.regplot(x=pr_wy[min_recent_year_index:max_recent_year_index],
+                 y=etc_wy[min_recent_year_index:max_recent_year_index],
+                 ax=ax1,
+                 fit_reg=True,
+                 robust=ROBUST,
+                 n_boot=BOOTSTRAP_SAMPLES,
+                 ci=CI,
+                 color='r',
+                 marker='None')
+ax1.xaxis.set_tick_params(width=0.2)
+ax1.yaxis.set_tick_params(width=0.2)
 
 #for n in np.arange(0,len(p1.lines),1):
 #    p1.lines[n]._linewidth = 0.8
@@ -204,7 +263,8 @@ if units == 'SI':
         label_point(data_year_slice(pr_wy, year), data_year_slice(etc_wy, year), data_year_slice(wy, year), ax1, **year_base_positions[year])
 #    label_point_contour(pd.Series(226), pd.Series(970), pd.Series(25), ax1) # contour 1
 #    label_point_contour(pd.Series(232), pd.Series(989), pd.Series(50), ax1) # contour 2
-    plt.xlim([40,600])
+    #plt.xlim([40,600])
+    plt.xlim([0,600])
     plt.ylim([890,1190])
     plt.xlabel('San Joaquin Valley Annual Total Precipitation (mm)')
     plt.ylabel('San Joaquin Valley Annual Total Crop Evapotranspiration (mm)')
